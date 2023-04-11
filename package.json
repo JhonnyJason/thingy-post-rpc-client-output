@@ -1,26 +1,30 @@
 {
-  "name": "thingy-post-rpc-client",
-  "version": "0.0.1",
-  "description": "The Thingy RPC client which uses POST request for the RPC.",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [ "thingy", "post", "rpc" ],
-  "author": "Lenard Frommelt lenard@frommelt.dev",
-  "license": "Unlicense",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JhonnyJason/thingy-post-rpc-client.git"
-  },
-  "bugs": {
-    "url": "https://github.com/JhonnyJason/thingy-post-rpc-client/issues"
-  },
-  "homepage": "https://github.com/JhonnyJason/thingy-post-rpc-client-output.git#readme",
-  "dependencies": {
-    "secret-manager-crypto-utils": "^0.2.0",
-    "thingy-session-utils": "^0.0.3",
-    "validatabletimestamp": "^0.0.1"
-  },
-  "type": "module"
+    "name": "thingy-post-rpc-client",
+    "version": "0.0.2",
+    "description": "The Thingy RPC client which uses POST request for the RPC.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "thingy",
+        "post",
+        "rpc"
+    ],
+    "author": "Lenard Frommelt lenard@frommelt.dev",
+    "license": "Unlicense",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/JhonnyJason/thingy-post-rpc-client.git"
+    },
+    "bugs": {
+        "url": "https://github.com/JhonnyJason/thingy-post-rpc-client/issues"
+    },
+    "homepage": "https://github.com/JhonnyJason/thingy-post-rpc-client-output.git#readme",
+    "dependencies": {
+        "secret-manager-crypto-utils": "^0.3.0",
+        "thingy-session-utils": "^0.0.5",
+        "validatabletimestamp": "^0.0.1"
+    },
+    "type": "module"
 }

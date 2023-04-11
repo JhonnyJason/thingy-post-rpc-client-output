@@ -1,4 +1,4 @@
-# thingy-post-rcp-client
+# thingy-post-rpc-client
 
 [![hackmd-github-sync-badge](https://hackmd.io/1q7fSSGSStWbjSV1K1kKeA/badge)](https://hackmd.io/1q7fSSGSStWbjSV1K1kKeA)
 
