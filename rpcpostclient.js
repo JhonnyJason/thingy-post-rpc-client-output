@@ -7,13 +7,19 @@
 
 //###########################################################
 //region imports
-var AUTHCODE_LIGHT, AUTHCODE_SHA2, TOKEN_SIMPLE, TOKEN_UNIQUE, authenticateServiceAuthCodeLight, authenticateServiceAuthCodeSHA2, authenticateServiceSignature, authenticateServiceStatement, doAnonymousRPC, doAuthCodeLightRPC, doAuthCodeSHA2RPC, doNoAuthRPC, doPublicAccessRPC, doSignatureRPC, doTokenSimpleRPC, doTokenUniqueRPC, establishSHA2AuthCodeSession, establishSimpleTokenSession, generateExplicitAuthCodeSeed, getExplicitSimpleToken, incRequestId, postRPCString, randomPostfix, startSessionExplicitly;
+var AUTHCODE_SHA2, TOKEN_SIMPLE, TOKEN_UNIQUE, authenticateServiceAuthCodeSHA2, authenticateServiceSignature, authenticateServiceStatement, doAnonymousRPC, doAuthCodeSHA2RPC, doNoAuthRPC, doPublicAccessRPC, doSignatureRPC, doTokenSimpleRPC, doTokenUniqueRPC, establishSHA2AuthCodeSession, establishSimpleTokenSession, establishUniqueTokenSession, extractServerId, generateSharedSecretSeed, getExplicitSimpleToken, incRequestId, postRPCString, randomPostfix, startSessionExplicitly;
 
 import * as secUtl from "secret-manager-crypto-utils";
 
 import * as validatableStamp from "validatabletimestamp";
 
 import * as sess from "thingy-session-utils";
+
+import * as tbut from "thingy-byte-utils";
+
+import {
+  FRAESC as Generator
+} from "feistelled-reduced-aes-core";
 
 import {
   NOT_AUTHORIZED,
@@ -29,9 +35,7 @@ TOKEN_SIMPLE = 0;
 
 TOKEN_UNIQUE = 1;
 
-AUTHCODE_LIGHT = 2;
-
-AUTHCODE_SHA2 = 3;
+AUTHCODE_SHA2 = 2;
 
 //###########################################################
 export var RPCPostClient = class RPCPostClient {
@@ -84,7 +88,7 @@ export var RPCPostClient = class RPCPostClient {
 
   async getServerId() {
     if (this.serverId == null) {
-      this.serverId = (await getValidatedNodeId(this));
+      await this.requestNodeId("none");
     }
     return this.serverId;
   }
@@ -102,6 +106,9 @@ export var RPCPostClient = class RPCPostClient {
 
   //#######################################################
   doRPC(func, args, authType) {
+    if (this.requestingNodeId && func !== "getNodeId") {
+      throw new Error("Cannot do regular RPCs while requesting NodeId!");
+    }
     switch (authType) {
       case "none":
         return doNoAuthRPC(func, args, this);
@@ -113,8 +120,6 @@ export var RPCPostClient = class RPCPostClient {
         return doTokenSimpleRPC(func, args, this);
       case "tokenUnique":
         return doTokenUniqueRPC(func, args, this);
-      case "authCodeLight":
-        return doAuthCodeLightRPC(func, args, this);
       case "authCodeSHA2":
         return doAuthCodeSHA2RPC(func, args, this);
       case "signature":
@@ -126,8 +131,20 @@ export var RPCPostClient = class RPCPostClient {
     }
   }
 
-};
+  //#######################################################
+  async requestNodeId(authType) {
+    var args, func;
+    this.requestingNodeId = true;
+    func = "getNodeId";
+    args = {};
+    try {
+      await this.doRPC(func, args, authType);
+    } finally {
+      this.requestingNodeId = false;
+    }
+  }
 
+};
 
 //#######################################################
 //region internal functions
@@ -156,13 +173,14 @@ postRPCString = async function(url, requestString) {
   } catch (error) {
     err = error;
     baseMsg = "Error! RPC could not receive a JSON response!";
+    statusText = "No http-status could be provided!";
     try {
-      bodyText = `Body:  ${(await response.text())}`;
       statusText = `HTTP-Status: ${response.status}`;
+      bodyText = `Body:  ${(await response.text())}`;
     } catch (error) {
       err2 = error;
       details = `No response could be retrieved! details: ${err.message}`;
-      errorMsg = `${baseMsg} ${details}`;
+      errorMsg = `${baseMsg} ${statusText} ${details}`;
       throw new NetworkError(errorMsg);
     }
     details = `${statusText} ${bodyText}`;
@@ -178,6 +196,28 @@ incRequestId = function(c) {
 
 //#######################################################
 //region RPC execution functions
+
+//#######################################################
+extractServerId = async function(response) {
+  var content, nodeId, result, sig, verified;
+  result = response.result;
+  if (typeof result === "object" && (result.serverNodeId != null)) {
+    validatableStamp.assertValidity(result.timestamp);
+    nodeId = result.serverNodeId;
+    sig = result.signature;
+    result.signature = "";
+    content = JSON.stringify(result);
+    verified = (await secUtl.verify(sig, nodeId, content));
+    if (!verified) {
+      throw new Error("ServerId validation Failed: Invalid Signature!");
+    }
+    return nodeId;
+  }
+  if ((response.auth != null) && (response.auth.serverId != null)) {
+    return response.auth.serverId;
+  }
+  return "";
+};
 
 //#######################################################
 doSignatureRPC = async function(func, args, type, c) {
@@ -202,6 +242,9 @@ doSignatureRPC = async function(func, args, type, c) {
   if (response.error) {
     throw new RPCError(func, response.error);
   }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
+  }
   await authenticateServiceSignature(response, requestId, serverId);
   return response.result;
 };
@@ -218,6 +261,9 @@ doNoAuthRPC = async function(func, args, c) {
   // olog response
   if (response.error) {
     throw new RPCError(response.error);
+  }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
   }
   return response.result;
 };
@@ -237,6 +283,9 @@ doAnonymousRPC = async function(func, args, c) {
   if (response.error) {
     throw new RPCError(response.error);
   }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
+  }
   return response.result;
 };
 
@@ -254,10 +303,13 @@ doPublicAccessRPC = async function(func, args, c) {
   serverId = c.serverId;
   response = (await postRPCString(c.serverURL, requestString));
   // olog response
-  authenticateServiceStatement(response, requestId, serverId);
   if (response.error) {
     throw new RPCError(response.error);
   }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
+  }
+  authenticateServiceStatement(response, requestId, serverId);
   return response.result;
 };
 
@@ -291,22 +343,47 @@ doTokenSimpleRPC = async function(func, args, c) {
     }
     throw new RPCError(func, response.error);
   }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
+  }
   await authenticateServiceStatement(response, requestId, serverId);
   return response.result;
 };
 
-doTokenUniqueRPC = function(func, args, c) {
+doTokenUniqueRPC = async function(func, args, c) {
+  var auth, clientId, corruptSession, name, requestId, requestString, requestToken, response, rpcRequest, serverId, timestamp, type, uniqueBytes;
   throw new Error("doTokenUniqueRPC: Not Implemented yet!");
+  await establishUniqueTokenSession(c);
+  incRequestId(c);
+  type = "tokenUnique";
+  clientId = (await c.getPublicKey());
+  requestId = c.requestId;
+  name = c.name;
+  timestamp = validatableStamp.create();
+  uniqueBytes = c.sessions[TOKEN_UNIQUE].generator.generate(timestamp);
+  requestToken = tbut.bytesToHex(uniqueBytes);
+  auth = {type, clientId, name, requestId, timestamp, requestToken};
+  rpcRequest = {auth, func, args};
+  requestString = JSON.stringify(rpcRequest);
+  serverId = (await c.getServerId());
+  response = (await postRPCString(c.serverURL, requestString));
+  // olog { response }
+
+  // in case of an error
+  if (response.error) {
+    corruptSession = (response.error.code != null) && response.error.code === NOT_AUTHORIZED;
+    if (corruptSession) {
+      c.sessions[TOKEN_UNIQUE] = null;
+    }
+    throw new RPCError(func, response.error);
+  }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
+  }
+  await authenticateServiceStatement(response, requestId, serverId);
+  return response.result;
 };
 
-// await establishUniqueTokenSession(c)
-// incRequestId(c)
-doAuthCodeLightRPC = function(func, args, c) {
-  throw new Error("doAuthCodeLightRPC: Not Implemented yet!");
-};
-
-// await establishAuthCodeLightSession(c)    
-// incRequestId(c)
 doAuthCodeSHA2RPC = async function(func, args, c) {
   var auth, authCode, clientId, corruptSession, name, requestAuthCode, requestId, requestString, response, rpcRequest, serverId, session, timestamp, type;
   await establishSHA2AuthCodeSession(c);
@@ -335,6 +412,9 @@ doAuthCodeSHA2RPC = async function(func, args, c) {
       c.sessions[AUTHCODE_SHA2] = null;
     }
     throw new RPCError(func, response.error);
+  }
+  if (c.requestingNodeId) {
+    c.serverId = (await extractServerId(response));
   }
   await authenticateServiceAuthCodeSHA2(response, requestId, serverId, c);
   return response.result;
@@ -382,23 +462,7 @@ establishSimpleTokenSession = async function(c) {
   }
 };
 
-// generateImplicitSimpleToken = (c) ->
-//     serverContext = c.serverContext
-//     timestamp = validatableStamp.create()
-
-//     specificContext = "implicit #{c.name}@#{timestamp}"
-//     context = "#{specificContext}:#{serverContext}_#{timestamp}"
-//     seedHex = await secUtl.diffieHellmanSecretHashHex(c.secretKeyHex, c.serverId, context)
-//     return await sess.createAuthCode(seedHex, specificContext)
-
-// generateImplicitAuthCodeSeed = (c) ->
-//     serverContext = c.serverContext
-//     timestamp = validatableStamp.create()
-
-//     specificContext = "implicit #{c.name}@#{timestamp}"
-//     context = "#{specificContext}:#{serverContext}_#{timestamp}"
-//     return await secUtl.diffieHellmanSecretHashHex(c.secretKeyHex, c.serverId, context)
-generateExplicitAuthCodeSeed = async function(timestamp, c) {
+generateSharedSecretSeed = async function(timestamp, c) {
   var context, serverContext, specificContext;
   serverContext = c.serverContext;
   specificContext = c.name;
@@ -410,6 +474,24 @@ getExplicitSimpleToken = function(c) {
   return startSessionExplicitly("tokenSimple", c);
 };
 
+establishUniqueTokenSession = async function(c) {
+  var err, message, seedBytes, session, timestamp;
+  if ((c.sessions[TOKEN_UNIQUE] != null) && (c.sessions[TOKEN_UNIQUE].seedHex != null)) {
+    return;
+  }
+  try {
+    session = {};
+    timestamp = (await startSessionExplicitly("tokenUnique", c));
+    seedBytes = tbut.hexToBytes((await generateSharedSecretSeed(timestamp, c)));
+    session.generator = new Generator(seedBytes);
+    c.sessions[TOKEN_UNIQUE] = session;
+  } catch (error) {
+    err = error;
+    message = `Could not establish a unique Token session! Details: ${err.message}`;
+    throw new Error(message);
+  }
+};
+
 establishSHA2AuthCodeSession = async function(c) {
   var err, message, session, timestamp;
   if ((c.sessions[AUTHCODE_SHA2] != null) && (c.sessions[AUTHCODE_SHA2].seedHex != null)) {
@@ -418,16 +500,11 @@ establishSHA2AuthCodeSession = async function(c) {
   try {
     session = {};
     timestamp = (await startSessionExplicitly("authCodeSHA2", c));
-    session.seedHex = (await generateExplicitAuthCodeSeed(timestamp, c));
-    // if c.implicitSessions
-    //     session.seedHex = await generateImplicitAuthCodeSeed(c)
-    // else
-    //     timestamp = await startSessionExplicitly("authCodeSHA2", c)
-    //     session.seedHex = await generateExplicitAuthCodeSeed(timestamp, c)
+    session.seedHex = (await generateSharedSecretSeed(timestamp, c));
     c.sessions[AUTHCODE_SHA2] = session;
   } catch (error) {
     err = error;
-    message = `Could not establish a simple Token session! Details: ${err.message}`;
+    message = `Could not establish an authCode with SHA2 session! Details: ${err.message}`;
     throw new Error(message);
   }
 };
@@ -543,49 +620,6 @@ authenticateServiceAuthCodeSHA2 = async function(response, ourRequestId, ourServ
   } catch (error) {
     err = error;
     throw new ResponseAuthError(`authenticateServiceAuthCodeSHA2: ${err.message}`);
-  }
-};
-
-authenticateServiceAuthCodeLight = function(response, ourRequestId, ourServerId, c) {
-  var err, requestId, responseAuthCode, responseString, serverId, session, timestamp;
-  try {
-    responseAuthCode = response.auth.responseAuthCode;
-    timestamp = response.auth.timestamp;
-    requestId = response.auth.requestId;
-    serverId = response.auth.serverId;
-    if (responseAuthCode == null) {
-      throw new Error("No ResponseAuthCode!");
-    }
-    if (timestamp == null) {
-      throw new Error("No Timestamp!");
-    }
-    if (requestId == null) {
-      throw new Error("No RequestId!");
-    }
-    if (serverId == null) {
-      throw new Error("No ServerId!");
-    }
-    if (requestId !== ourRequestId) {
-      throw new Error("RequestId Mismatch!");
-    }
-    if (serverId !== ourServerId) {
-      throw new Error("ServerId Mismatch!");
-    }
-    validatableStamp.assertValidity(timestamp);
-    session = c.sessions[AUTHCODE_Light];
-    if ((session == null) || (session.seedHex == null)) {
-      throw new Error("Local session object has become invalid!");
-    }
-    response.auth.requestAuthCode = "";
-    responseString = JSON.stringify(response);
-    throw new Error("Not implemented yet!");
-    // authCode = await sess.createAuthCodeLight(session.seedHex, requestString)
-    if (authCode !== responseAuthCode) {
-      throw new Error("AuthCodes did not Match!");
-    }
-  } catch (error) {
-    err = error;
-    throw new ResponseAuthError(`authenticateServiceAuthCodeLight: ${err.message}`);
   }
 };
 

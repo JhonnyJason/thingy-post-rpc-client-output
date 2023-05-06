@@ -24,7 +24,9 @@
     "dependencies": {
         "secret-manager-crypto-utils": "^0.3.0",
         "thingy-session-utils": "^0.0.5",
-        "validatabletimestamp": "^0.0.1"
+        "thingy-byte-utils": "^0.0.8",
+        "validatabletimestamp": "^0.0.1",
+        "feistelled-reduced-aes-core": "^0.0.1"
     },
     "type": "module"
 }
