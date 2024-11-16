@@ -81,6 +81,7 @@ export var ResponseAuthError = class ResponseAuthError extends Error {
 export var RPCError = class RPCError extends Error {
   constructor(func, remoteError) {
     var error, errorCode;
+    console.log(JSON.stringify(remoteError, null, 4));
     errorCode = remoteError.code;
     error = rpcErrorMap.get(errorCode);
     super(`${func}: ${error.message} (${remoteError.message})`);

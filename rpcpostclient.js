@@ -7,7 +7,7 @@
 
 //###########################################################
 //region imports
-var AUTHCODE_SHA2, TOKEN_SIMPLE, TOKEN_UNIQUE, authenticateServiceAuthCodeSHA2, authenticateServiceSignature, authenticateServiceStatement, doAnonymousRPC, doAuthCodeSHA2RPC, doNoAuthRPC, doPublicAccessRPC, doSignatureRPC, doTokenSimpleRPC, doTokenUniqueRPC, establishSHA2AuthCodeSession, establishSimpleTokenSession, establishUniqueTokenSession, extractServerId, generateSharedSecretSeed, getExplicitSimpleToken, incRequestId, postRPCString, randomPostfix, startSessionExplicitly;
+var AUTHCODE_SHA2, TOKEN_SIMPLE, TOKEN_UNIQUE, authenticateServiceAuthCodeSHA2, authenticateServiceSignature, authenticateServiceStatement, doAnonymousRPC, doAuthCodeSHA2RPC, doNoAuthRPC, doPublicAccessRPC, doSignatureRPC, doTokenSimpleRPC, doTokenUniqueRPC, establishSHA2AuthCodeSession, establishSimpleTokenSession, establishUniqueTokenSession, generateSharedSecretSeed, getExplicitSimpleToken, incRequestId, postRPCString, randomPostfix, startSessionExplicitly;
 
 import * as secUtl from "secret-manager-crypto-utils";
 
@@ -133,12 +133,19 @@ export var RPCPostClient = class RPCPostClient {
 
   //#######################################################
   async requestNodeId(authType) {
-    var args, func;
+    var args, func, result;
+    if (this.requestingNodeId) {
+      throw new Error("Request for nodeId already pending!");
+    }
+    if (authType === "tokenSimple" || authType === "tokenUnique" || authType === "authCodeSHA2") {
+      throw new Error("Requesting nodeId inside session - don't do this!");
+    }
     this.requestingNodeId = true;
     func = "getNodeId";
     args = {};
     try {
-      await this.doRPC(func, args, authType);
+      result = (await this.doRPC(func, args, authType));
+      this.serverId = result.nodeId;
     } finally {
       this.requestingNodeId = false;
     }
@@ -153,12 +160,12 @@ export var RPCPostClient = class RPCPostClient {
 randomPostfix = function() {
   var rand;
   rand = Math.random();
-  return Math.round(rand * 1000);
+  return Math.round(rand * 1000000);
 };
 
 //#######################################################
 postRPCString = async function(url, requestString) {
-  var baseMsg, bodyText, details, err, err2, errorMsg, options, response, statusText;
+  var baseMsg, details, err, err2, errorMsg, options, response, statusText;
   options = {
     method: 'POST',
     credentials: 'omit',
@@ -176,15 +183,15 @@ postRPCString = async function(url, requestString) {
     statusText = "No http-status could be provided!";
     try {
       statusText = `HTTP-Status: ${response.status}`;
-      bodyText = `Body:  ${(await response.text())}`;
     } catch (error) {
+      // bodyText = "Body:  #{await response.text()}"
       err2 = error;
-      details = `No response could be retrieved! details: ${err.message}`;
-      errorMsg = `${baseMsg} ${statusText} ${details}`;
+      details = `No response could be retrieved!\nMessage: ${err.message}\nCause: ${err.cause}`;
+      errorMsg = `${baseMsg} \n${statusText} \n${details}`;
       throw new NetworkError(errorMsg);
     }
-    details = `${statusText} ${bodyText}`;
-    errorMsg = `${baseMsg} ${details}`;
+    details = `${statusText} \nMessage: ${err.message} \nCause: ${err.cause}`;
+    errorMsg = `${baseMsg} \n${details}`;
     throw new NetworkError(errorMsg);
   }
 };
@@ -198,28 +205,6 @@ incRequestId = function(c) {
 //region RPC execution functions
 
 //#######################################################
-extractServerId = async function(response) {
-  var content, nodeId, result, sig, verified;
-  result = response.result;
-  if (typeof result === "object" && (result.serverNodeId != null)) {
-    validatableStamp.assertValidity(result.timestamp);
-    nodeId = result.serverNodeId;
-    sig = result.signature;
-    result.signature = "";
-    content = JSON.stringify(result);
-    verified = (await secUtl.verify(sig, nodeId, content));
-    if (!verified) {
-      throw new Error("ServerId validation Failed: Invalid Signature!");
-    }
-    return nodeId;
-  }
-  if ((response.auth != null) && (response.auth.serverId != null)) {
-    return response.auth.serverId;
-  }
-  return "";
-};
-
-//#######################################################
 doSignatureRPC = async function(func, args, type, c) {
   var auth, clientId, name, requestId, requestString, response, rpcRequest, serverId, sigHex, signature, timestamp;
   incRequestId(c);
@@ -230,7 +215,9 @@ doSignatureRPC = async function(func, args, type, c) {
   signature = "";
   auth = {type, clientId, name, requestId, timestamp, signature};
   rpcRequest = {auth, func, args};
-  serverId = (await c.getServerId());
+  if (!c.requestingNodeId) {
+    serverId = (await c.getServerId());
+  }
   requestString = JSON.stringify(rpcRequest);
   sigHex = (await secUtl.createSignature(requestString, c.secretKeyHex));
   requestString = requestString.replace('"signature":""', '"signature":"' + sigHex + '"');
@@ -243,7 +230,7 @@ doSignatureRPC = async function(func, args, type, c) {
     throw new RPCError(func, response.error);
   }
   if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
+    serverId = response.result.serverNodeId;
   }
   await authenticateServiceSignature(response, requestId, serverId);
   return response.result;
@@ -253,44 +240,38 @@ doSignatureRPC = async function(func, args, type, c) {
 //#######################################################
 //region public RPCs
 doNoAuthRPC = async function(func, args, c) {
-  var auth, requestString, response, serverId;
+  var auth, requestString, response, rpcRequest;
   auth = null;
-  requestString = JSON.stringify({auth, func, args});
-  serverId = c.serverId;
+  rpcRequest = {auth, func, args};
+  requestString = JSON.stringify(rpcRequest);
   response = (await postRPCString(c.serverURL, requestString));
   // olog response
   if (response.error) {
     throw new RPCError(response.error);
   }
-  if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
-  }
   return response.result;
 };
 
 doAnonymousRPC = async function(func, args, c) {
-  var auth, requestId, requestString, requestToken, response, serverId, timestamp, type;
+  var auth, requestId, requestString, requestToken, response, rpcRequest, timestamp, type;
   incRequestId(c);
   type = "anonymous";
   requestId = c.requestId;
   timestamp = validatableStamp.create();
   requestToken = c.anonymousToken;
   auth = {type, requestId, timestamp, requestToken};
-  requestString = JSON.stringify({auth, func, args});
-  serverId = c.serverId;
+  rpcRequest = {auth, func, args};
+  requestString = JSON.stringify(rpcRequest);
   response = (await postRPCString(c.serverURL, requestString));
   // olog response
   if (response.error) {
     throw new RPCError(response.error);
   }
-  if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
-  }
   return response.result;
 };
 
 doPublicAccessRPC = async function(func, args, c) {
-  var auth, clientId, requestId, requestString, requestToken, response, serverId, timestamp, type;
+  var auth, clientId, requestId, requestString, requestToken, response, rpcRequest, serverId, timestamp, type;
   incRequestId(c);
   type = "publicAccess";
   requestId = c.requestId;
@@ -298,16 +279,18 @@ doPublicAccessRPC = async function(func, args, c) {
   timestamp = validatableStamp.create();
   requestToken = c.publicToken;
   auth = {type, clientId, requestId, timestamp, requestToken};
-  // olog auth
-  requestString = JSON.stringify({auth, func, args});
-  serverId = c.serverId;
+  rpcRequest = {auth, func, args};
+  requestString = JSON.stringify(rpcRequest);
+  if (!c.requestingNodeId) {
+    serverId = (await c.getServerId());
+  }
   response = (await postRPCString(c.serverURL, requestString));
   // olog response
   if (response.error) {
     throw new RPCError(response.error);
   }
   if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
+    serverId = response.result.nodeId;
   }
   authenticateServiceStatement(response, requestId, serverId);
   return response.result;
@@ -343,9 +326,6 @@ doTokenSimpleRPC = async function(func, args, c) {
     }
     throw new RPCError(func, response.error);
   }
-  if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
-  }
   await authenticateServiceStatement(response, requestId, serverId);
   return response.result;
 };
@@ -376,9 +356,6 @@ doTokenUniqueRPC = async function(func, args, c) {
       c.sessions[TOKEN_UNIQUE] = null;
     }
     throw new RPCError(func, response.error);
-  }
-  if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
   }
   await authenticateServiceStatement(response, requestId, serverId);
   return response.result;
@@ -412,9 +389,6 @@ doAuthCodeSHA2RPC = async function(func, args, c) {
       c.sessions[AUTHCODE_SHA2] = null;
     }
     throw new RPCError(func, response.error);
-  }
-  if (c.requestingNodeId) {
-    c.serverId = (await extractServerId(response));
   }
   await authenticateServiceAuthCodeSHA2(response, requestId, serverId, c);
   return response.result;
