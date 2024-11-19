@@ -230,7 +230,7 @@ doSignatureRPC = async function(func, args, type, c) {
     throw new RPCError(func, response.error);
   }
   if (c.requestingNodeId) {
-    serverId = response.result.serverNodeId;
+    serverId = response.result.nodeId;
   }
   await authenticateServiceSignature(response, requestId, serverId);
   return response.result;
