@@ -1,6 +1,6 @@
 {
     "name": "thingy-post-rpc-client",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "description": "The Thingy RPC client which uses POST request for the RPC.",
     "main": "index.js",
     "scripts": {
@@ -12,7 +12,7 @@
         "rpc"
     ],
     "author": "Lenard Frommelt lenard@frommelt.dev",
-    "license": "Unlicense",
+    "license": "CC0",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/JhonnyJason/thingy-post-rpc-client.git"
@@ -22,10 +22,10 @@
     },
     "homepage": "https://github.com/JhonnyJason/thingy-post-rpc-client-output.git#readme",
     "dependencies": {
-        "secret-manager-crypto-utils": "^0.3.0",
-        "thingy-session-utils": "^0.0.5",
+        "secret-manager-crypto-utils": "^0.3.1",
+        "thingy-session-utils": "^0.0.6",
         "thingy-byte-utils": "^0.0.8",
-        "validatabletimestamp": "^0.0.1",
+        "validatabletimestamp": "^0.0.4",
         "feistelled-reduced-aes-core": "^0.0.1"
     },
     "type": "module"

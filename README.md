@@ -101,3 +101,5 @@ Note: one RPCPostClient may only have 1 session and this is either of these type
 Generally one `RPCPostClient` only maintains one session per `authType`.
 For multiple sessions of the same `authType` and `clientId` you can use multiple `RPCPostClient`s. In this situation the option `name` is important as the server should use the `name` to distinguish these sessions. Using the same `name` and `clientId` would result in overwriting previous session information.
 
+# License
+[CC0](https://creativecommons.org/publicdomain/zero/1.0/)

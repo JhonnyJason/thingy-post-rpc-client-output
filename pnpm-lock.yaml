@@ -12,17 +12,17 @@ importers:
         specifier: ^0.0.1
         version: 0.0.1
       secret-manager-crypto-utils:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.3.1
+        version: 0.3.1
       thingy-byte-utils:
         specifier: ^0.0.8
         version: 0.0.8
       thingy-session-utils:
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.0.6
+        version: 0.0.6
       validatabletimestamp:
-        specifier: ^0.0.1
-        version: 0.0.1
+        specifier: ^0.0.4
+        version: 0.0.4
 
 packages:
 
@@ -32,17 +32,17 @@ packages:
   feistelled-reduced-aes-core@0.0.1:
     resolution: {integrity: sha512-d2iSRCb/t25lQ0fSGkXxYOxmt5cf63qse1NRa6FjEhNGiTEXm+qfVhKb6B6ZQHDhRxFiGvaMe7cmx4C1JuT7dw==}
 
-  secret-manager-crypto-utils@0.3.0:
-    resolution: {integrity: sha512-CRdXxw5sNhEdnpJyRDopzQzplg59CdEDEjGA5OucETZz6r8H2oVIzTRcftKHUWmOib9lhxYoJIHewj0wXXttlA==}
+  secret-manager-crypto-utils@0.3.1:
+    resolution: {integrity: sha512-w4usWFH1r4ucR8dZBk81kmBo3ZOouU6a+/fZEaOFaP22icFapbelf1f5M1QwcbZ0AwPDeWfwvq8DfNOr0PAQyg==}
 
   thingy-byte-utils@0.0.8:
     resolution: {integrity: sha512-m9+aSv0XrU1g6Da61Qq0ZnyflSYx1/uWfD98UFziOV4WMrEzE5eHTjXGhxhFRzauL3EkwujZZJbOBxj8PzHyAg==}
 
-  thingy-session-utils@0.0.5:
-    resolution: {integrity: sha512-LkZc5gT6NAhUG4WxtchygmPDSx2oukV2cQ63n3+Zym1tAGjUsUe2bg6pJB2++afA7pKbW64nZwgMYTSa8OAkaA==}
+  thingy-session-utils@0.0.6:
+    resolution: {integrity: sha512-YarpuDDO2wH34LLNI9jnHSMJeg8/oqgG7N37ZkAX4kCasKKHuBAnz5EOaAEU0DmUEnIi0f2KjCbVYKIXZllPIg==}
 
-  validatabletimestamp@0.0.1:
-    resolution: {integrity: sha512-vCCYC4oGC3FQdl2xHBdKSixKNWzzNfhugG0sucPLnO7lK7H9HHBy60p9cc10yotZRErc+SWAPJij7FZAbQ8eQA==}
+  validatabletimestamp@0.0.4:
+    resolution: {integrity: sha512-HS6xBuk9RYfZ9nEBjimEXY+XYnR6xP0jK9MsdhEtxIcfnrGmxFhg3DMZdZJ7btG2vPDGltK248Jg3rK7PTeFsg==}
 
 snapshots:
 
@@ -50,16 +50,16 @@ snapshots:
 
   feistelled-reduced-aes-core@0.0.1: {}
 
-  secret-manager-crypto-utils@0.3.0:
+  secret-manager-crypto-utils@0.3.1:
     dependencies:
       '@noble/ed25519': 2.1.0
       thingy-byte-utils: 0.0.8
 
   thingy-byte-utils@0.0.8: {}
 
-  thingy-session-utils@0.0.5:
+  thingy-session-utils@0.0.6:
     dependencies:
-      secret-manager-crypto-utils: 0.3.0
+      secret-manager-crypto-utils: 0.3.1
       thingy-byte-utils: 0.0.8
 
-  validatabletimestamp@0.0.1: {}
+  validatabletimestamp@0.0.4: {}
